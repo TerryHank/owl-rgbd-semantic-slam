@@ -1,0 +1,35 @@
+# RTAB-Map 0.23.13. Each row is a native RTAB-Map parameter and value.
+Reg/Strategy 0
+Reg/Force3DoF true
+Optimizer/Strategy 2
+Optimizer/GravitySigma 0
+RGBD/Enabled true
+RGBD/CreateOccupancyGrid true
+RGBD/ProximityBySpace false
+Rtabmap/DetectionRate 1
+Odom/KeyFrameThr 0.65
+Vis/CorType 0
+Vis/EstimationType 0
+Vis/InlierDistance 0.05
+Vis/GridRows 3
+Vis/GridCols 4
+Grid/Sensor 1
+Grid/3D false
+Grid/CellSize 0.05
+Grid/NormalsSegmentation false
+Grid/MaxGroundHeight 0.045
+Grid/MaxObstacleHeight 0.50
+Grid/RangeMin 0.3
+Grid/RangeMax 4.5
+Grid/DepthDecimation 2
+Grid/RayTracing true
+Mem/UseOdomFeatures false
+RGBD/OptimizeMaxError 5
+
+# These settings apply only to the visual odometry frontend.
+[odometry]
+Odom/Strategy 0
+Optimizer/Iterations 3
+Vis/MaxFeatures 450
+OdomF2M/MaxSize 900
+OdomF2M/BundleAdjustment 0

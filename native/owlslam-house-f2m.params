@@ -1,0 +1,7 @@
+# RGB-D-only frame-to-map frontend for the House replay.
+Odom/Strategy 0
+Vis/CorType 0
+Optimizer/Iterations 3
+Vis/MaxFeatures 450
+OdomF2M/MaxSize 900
+OdomF2M/BundleAdjustment 0

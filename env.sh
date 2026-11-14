@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+source /opt/ros/humble/setup.bash
+source "$HOME/linorobot2_ws/install/setup.bash"
+source "$HOME/linorobot2_ws/install-native/setup.bash"
+export GAZEBO_MODEL_PATH="$HOME/linorobot2_ws/assets/osrf_models:${GAZEBO_MODEL_PATH:-}"
+export LINOROBOT2_BASE=mecanum
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export CYCLONEDDS_URI="file://$HOME/linorobot2_ws/cyclonedds.xml"
+export ROS_DOMAIN_ID=65
+export ROS_LOCALHOST_ONLY=1
+export GAZEBO_MASTER_URI=http://127.0.0.1:11365
+export GAZEBO_PLUGIN_PATH="$HOME/linorobot2_ws/display/rosbot_xl:${GAZEBO_PLUGIN_PATH:-}"

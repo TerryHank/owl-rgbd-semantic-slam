@@ -1,0 +1,2 @@
+# Frontend-only overrides. Keep the backend pose graph and loop registration defaults.
+Optimizer/Iterations 3

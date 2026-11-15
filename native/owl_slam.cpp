@@ -318,6 +318,75 @@ private:
     size_t nodes_ = 0, peakPending_ = 0;
     std::vector<double> mapTimes_, queueTimes_;
 };
+
+class GyroHeading {
+public:
+    explicit GyroHeading(const char* path) {
+        std::ifstream input(path);
+        std::string magic;
+        double x, y, z, roll, pitch, yaw;
+        if (!(input >> magic >> x >> y >> z >> roll >> pitch >> yaw) || magic != "IMU1" ||
+            !std::isfinite(x+y+z+roll+pitch+yaw))
+            throw std::runtime_error("Expected IMU1 calibration header for OWL_GYRO");
+        const rtabmap::Transform base(x,y,z,roll,pitch,yaw);
+        double stamp;
+        while (input >> stamp) {
+            double wx, wy, wz, ax, ay, az;
+            if (!(input >> wx >> wy >> wz >> ax >> ay >> az) || !std::isfinite(stamp+wx+wy+wz) ||
+                (!samples_.empty() && stamp <= samples_.back().stamp))
+                throw std::runtime_error("Invalid or unordered gyroscope measurements");
+            Sample next{stamp, base.r31()*wx + base.r32()*wy + base.r33()*wz, 0., 0};
+            if (!samples_.empty()) {
+                const auto& last = samples_.back();
+                const double dt = stamp-last.stamp;
+                next.angle = last.angle + .5*dt*(last.rate+next.rate);
+                next.gaps = last.gaps + (dt > .05);
+            }
+            samples_.push_back(next);
+        }
+        if (!input.eof() || samples_.size() < 2)
+            throw std::runtime_error("Incomplete gyroscope recording");
+    }
+
+    rtabmap::Transform guess(const rtabmap::Odometry& odometry, double stamp) {
+        if (!odometry.framesProcessed()) return {};
+        const double previous = odometry.previousStamp();
+        if (previous < samples_.front().stamp || stamp > samples_.back().stamp || stamp <= previous) {
+            ++uncovered_;
+            return {};
+        }
+        const auto from = at(previous), to = at(stamp);
+        if (from.gaps != to.gaps || from.gaps < 0 || to.gaps < 0) {
+            ++uncovered_;
+            return {};
+        }
+        const auto& velocity = odometry.getVelocityGuess();
+        const double dt = stamp-previous;
+        ++used_;
+        return rtabmap::Transform(velocity.isNull() ? 0. : velocity.x()*dt,
+                                  velocity.isNull() ? 0. : velocity.y()*dt, 0.,
+                                  0., 0., std::remainder(to.angle-from.angle, 2*std::acos(-1.)));
+    }
+
+    size_t used() const { return used_; }
+    size_t uncovered() const { return uncovered_; }
+
+private:
+    struct Sample { double stamp, rate, angle; int gaps; };
+
+    Sample at(double stamp) const {
+        const auto right = std::lower_bound(samples_.begin(), samples_.end(), stamp,
+            [](const Sample& sample, double time) { return sample.stamp < time; });
+        if (right == samples_.begin() || right->stamp == stamp) return *right;
+        const auto& left = *(right-1);
+        const double span = right->stamp-left.stamp, delta = stamp-left.stamp;
+        const double rate = left.rate + (right->rate-left.rate)*delta/span;
+        return {stamp, rate, left.angle+.5*delta*(left.rate+rate), span > .05 ? -1 : left.gaps};
+    }
+
+    std::vector<Sample> samples_;
+    size_t used_ = 0, uncovered_ = 0;
+};
 }
 
 int main(int argc, char** argv) try {
@@ -354,6 +423,12 @@ int main(int argc, char** argv) try {
         for (const auto& [name, value] : loadParameters(overrides)) odomParams[name] = value;
     }
     std::unique_ptr<rtabmap::Odometry> odom(rtabmap::Odometry::create(odomParams));
+    std::unique_ptr<GyroHeading> gyroHeading;
+    if (const char* path = std::getenv("OWL_GYRO"); path && *path) {
+        if (odom->getType() != rtabmap::Odometry::kTypeF2M)
+            throw std::runtime_error("OWL_GYRO is an optional heading prior for F2M");
+        gyroHeading = std::make_unique<GyroHeading>(path);
+    }
     MappingWorker mapper(params, argv[2], argc == 4 ? argv[3] : nullptr, camera);
     int frames = 0, tracked = 0;
     std::ofstream rawPoses;
@@ -389,7 +464,9 @@ int main(int argc, char** argv) try {
         rtabmap::SensorData data(color, depth, camera, ++frames, stamp);
         rtabmap::OdometryInfo info;
         const auto started = Clock::now();
-        const auto pose = odom->process(data, &info);
+        // The gyroscope seeds registration. RGB-D still estimates the final relative pose.
+        const auto pose = gyroHeading ? odom->process(data, gyroHeading->guess(*odom, stamp), &info)
+                                      : odom->process(data, &info);
         odomTimes.push_back(elapsed(started));
         if (!pose.isNull()) {
             ++tracked;
@@ -423,7 +500,10 @@ int main(int argc, char** argv) try {
     std::cout << "summary frames=" << frames << " tracked=" << tracked
               << " odom_p95_ms=" << odomP95 << " odom_max_ms=" << odomMax;
     mapper.report();
-    std::cout << " frontend_ms=" << frontendMs << " wall_ms=" << elapsed(runStart) << '\n';
+    if (gyroHeading)
+        std::cout << " gyro_guesses=" << gyroHeading->used() << " gyro_uncovered=" << gyroHeading->uncovered();
+    std::cout << " frontend_ms=" << frontendMs
+              << " wall_ms=" << elapsed(runStart) << '\n';
     return mapper.updates() > 0 ? 0 : 1;
 } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

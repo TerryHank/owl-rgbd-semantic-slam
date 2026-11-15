@@ -77,6 +77,34 @@ python3 native/semantic-objects.py recording.owl detections.jsonl odom.csv \
 
 当前验证覆盖 x86 WSL 和 Orange Pi 5 Pro 的 OWL 仿真录像回放。实体 OWL 的 Linux ARM64 SDK、实机标定、长时间运行的帧率和温升仍待验证。仿真参数中的相机外参由录制时读取，板端使用实际安装标定。
 
+## F2M 可选陀螺仪航向
+
+`OWL_GYRO` 可指向同一次录制的 `IMU1` 文件。程序将角速度旋转到车体坐标并积分相邻 RGB-D 帧之间的航向增量。F2M 用视觉速度预测平移，用这个航向增量作为特征配准的初值，最终位姿由 RGB-D 配准求解。加速度不参与计算。未设置 `OWL_GYRO` 时，F2M 使用默认的纯 RGB-D 路径。该选项面向录制数据回放。
+
+在仿真中，可用 `OWL_GAZEBO_IMU_HZ=200` 重新生成机器人模型并重启 Gazebo，再通过 `capture-gazebo.py paired.owl --imu-csv imu.txt --imu-frame imu_link` 同时录制彩色、深度和 IMU。IMU 文件的首行为 `IMU1 x y z roll pitch yaw`，随后的每行是采集时间、三轴角速度和三轴加速度，使用 SI 单位。
+
+```bash
+OWL_GYRO=imu.txt ./build/owl_slam native/owlslam.params gyro.db gyro-map.bin < paired.owl
+./build/owl_slam native/owlslam.params rgbd.db rgbd-map.bin < paired.owl
+```
+
+### House 长路线 A/B 对照
+
+同一段 640×400、25 FPS、1,707 帧的 Gazebo Classic 录像。两组使用相同的 F2M、回环和建图参数。香橙派 5 Pro 上同时运行 RKNN YOLOE-26n-seg 和中文语义融合。下表的墙面散布是两段固定墙面抽样的法向坐标 P90−P10；位置与航向误差相对 Gazebo 真值计算，真值只参与评价。
+
+| 指标 | 纯 RGB-D F2M | 加陀螺仪航向初值 |
+|---|---:|---:|
+| 跟踪帧数 | 1,707 / 1,707 | 1,707 / 1,707 |
+| 原速接受的回环约束 | 6 | 6 |
+| 轨迹位置 RMSE | 0.98 cm | 1.49 cm |
+| 航向 RMSE | 0.33° | 0.51° |
+| 两段墙面回环后的散布 | 5.76 / 0.95 cm | 6.00 / 0.77 cm |
+| 板端原速最大积压 | 22.1 ms | 35.5 ms |
+| 板端原速逐帧处理 P95 | 39.3 ms | 38.7 ms |
+| 板端不限速完整 SLAM 吞吐，YOLOE 并跑 | 49.4 FPS | 48.9 FPS |
+
+陀螺仪组首次回环前后保留了 19 个中文物体 ID，标签重新贴合校正后的点云，最大移动 5.4 cm。两组吞吐都高于 25 FPS 留 20% 余量对应的 31.25 FPS。此次陀螺仪初值未带来整体地图质量收益，因此保留纯 RGB-D F2M 为默认。
+
 ## 已验证的基线
 
 Gazebo 同一圈录制 1363 帧，640×400，采集跨度 54.481 秒，平均 25.00 fps。两次从空数据库运行均跟踪 1363/1363 帧、生成 45 个优化图节点、接受 1 次视觉回环（1244 → 1）。数据库通过 SQLite quick_check。

@@ -2,6 +2,7 @@
 import copy
 import json
 from math import radians, tan
+import os
 from pathlib import Path
 import subprocess
 import xml.etree.ElementTree as ET
@@ -71,6 +72,10 @@ for element in lino:
         robot.append(element)
     elif element.tag == "gazebo" and element.get("reference") in sensor_names | {"imu_link"}:
         robot.append(copy.deepcopy(element))
+
+if "OWL_GAZEBO_IMU_HZ" in os.environ:
+    for imu in robot.findall("gazebo[@reference='imu_link']/sensor[@type='imu']"):
+        imu.find("update_rate").text = str(int(os.environ["OWL_GAZEBO_IMU_HZ"]))
 
 # Nominal rectilinear optics from the V1.5 specification table. The 40 mm
 # structured-light baseline is not a calibrated RGB-to-depth translation.

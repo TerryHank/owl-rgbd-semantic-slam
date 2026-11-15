@@ -8,5 +8,6 @@ fi
 config="$(dirname -- "${BASH_SOURCE[0]}")/owlslam.params"
 exec env -i HOME="$HOME" PATH=/usr/bin:/bin OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 \
     OWL_ODOM_PARAMS="${OWL_ODOM_PARAMS:-}" \
+    OWL_GYRO="${OWL_GYRO:-}" \
     LD_LIBRARY_PATH=/opt/ros/humble/lib/x86_64-linux-gnu \
     "$ws/build/owl_slam" "$config" "$2" < "$1"
